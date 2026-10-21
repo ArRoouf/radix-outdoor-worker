@@ -1,3 +1,12 @@
+import {cashierRoutes} from './routes/cashier';
+import {receiptData,paperWidth} from './services/cashier';
+import {thermalReceipt} from './views/cashier';
+import {inventoryRoutes} from './routes/inventory';
+import {startOpname,saveOpname,finalizeOpname,getOpname,withdrawUnits,scanCart,saveBundle,bundleSchema} from './services/inventory';
+import { openShift, closeShift, cashExpense } from './services/cash';
+import { createSettlement, paySettlement } from './services/settlements';
+import { saveFineComponent } from './services/fines';
+import { operationsRoutes } from './routes/operations';
 import {renderPDF} from './services/pdf';
 import {checkoutRoutes} from './routes/checkout';
 import {authPage} from './views/auth';
@@ -190,6 +199,7 @@ async function bootstrap(c: any) {
             maintenance: grouped.maintenance,
             movement: grouped.movement,
             opname: grouped.opname,
+            fine_component: grouped.fine_component,
         };
         data.bookings = data.bookings.map(({ paid, total, dp, subtotal, discount, customer_phone, ...b }: any) => b);
     }
@@ -329,7 +339,7 @@ app.post("/api/v1/products", async (c) => {
             outlet_id: outlet.id,
             code: (b.prefix || "UNT").slice(0, 6).toUpperCase() +
                 "-" +
-                uid().slice(0, 6).toUpperCase(),
+                uid().slice(-8).toUpperCase(),
             status: "available",
             condition_note: "Baik",
             purchase_price: Number(b.purchase_price) || 0,
@@ -496,17 +506,7 @@ const recordSchemas: Record<string, z.ZodTypeAny> = {
         start_at: z.number().optional(),
         end_at: z.number().optional(),
     }),
-    bundle: z.object({
-        name: z.string().min(2),
-        price: z.coerce.number().int().positive(),
-        description: z.string(),
-        items: z
-            .array(z.object({
-            product_id: z.string(),
-            qty: z.coerce.number().int().positive(),
-        }))
-            .min(1),
-    }),
+    bundle: bundleSchema,
     template: z.object({ name: z.string().min(2), message: z.string().min(5) }),
     ticket: z.object({ subject: z.string().min(3), message: z.string().min(5) }),
 };
@@ -517,6 +517,7 @@ app.post("/api/v1/records/:kind", async (c) => {
     if (!schema)
         fail("INVALID_ENTITY", "Jenis data tidak valid");
     const b = schema.parse(await c.req.json()), id = uid(), r = c.get("repo");
+    if(kind==='bundle')return output(c,await saveBundle(r,b,c.get('user')));
     if(c.get('member').role==='admin')b.outlet_id=c.get('member').outlet_id;
     if (kind === "voucher" && b.kind === "percent" && b.value > 100)
         fail("INVALID_DISCOUNT", "Diskon maksimal 100%");
@@ -554,6 +555,7 @@ app.patch("/api/v1/records/:id", async (c) => {
     if (!schema)
         fail("IMMUTABLE", "Data operasional ini tidak dapat diedit");
     const data = schema.parse(b);
+    if(row.kind==='bundle')return output(c,await saveBundle(r,data,c.get('user'),id));
     await r.batch([
         r.stmt("UPDATE records SET data=?1 WHERE id=?2", JSON.stringify(data), id),
         r.audit(c.get("user"), row.kind + ".updated", id),
@@ -605,114 +607,35 @@ app.post("/api/v1/maintenance/:id/complete", async (c) => {
     ]);
     return output(c, true);
 });
-app.post("/api/v1/stock/opname", async (c) => {
-    allow(c, ["owner", "warehouse"]);
-    const b = z
-        .object({
-        note: z.string().min(2),
-        units: z
-            .array(z.object({ id: z.string(), present: z.boolean() }))
-            .min(1),
-    })
-        .parse(await c.req.json()), r = c.get("repo");
-    for (const u of b.units)
-        if (!(await r.first("SELECT id FROM units WHERE id=?", u.id)))
-            fail("NOT_FOUND", "Unit tidak ditemukan");
-    await r.batch([
-        r.record("opname", {
-            ...b,
-            user: c.get("user"),
-            difference: b.units.filter((u) => !u.present).length,
-        }),
-        r.audit(c.get("user"), "stock.opname"),
-    ]);
-    return output(c, true);
+app.post('/api/v1/stock/opname',async c=>{allow(c,['owner','warehouse']);return output(c,await startOpname(c.get('repo'),await c.req.json(),c.get('user'),c.req.header('Idempotency-Key')||''));});
+app.get('/api/v1/stock/opname/:id',async c=>{allow(c,['owner','warehouse']);return output(c,await getOpname(c.get('repo'),c.req.param('id')));});
+app.post('/api/v1/stock/opname/:id/save',async c=>{allow(c,['owner','warehouse']);return output(c,await saveOpname(c.get('repo'),c.req.param('id'),await c.req.json(),c.get('user')));});
+app.post('/api/v1/stock/opname/:id/finalize',async c=>{allow(c,['owner','warehouse']);return output(c,await finalizeOpname(c.get('repo'),c.req.param('id'),await c.req.json(),c.get('user')));});
+app.post('/api/v1/withdrawals',async c=>{allow(c,['owner']);return output(c,await withdrawUnits(c.get('repo'),await c.req.json(),c.get('user'),c.req.header('Idempotency-Key')||''));});
+app.post('/api/v1/cashier/scan',async c=>{allow(c);return output(c,await scanCart(c.get('repo'),await c.req.json()));});
+app.post('/api/v1/shifts/open', async c => {
+    allow(c);return output(c,await openShift(c.get('repo'),await c.req.json(),c.get('user')));
 });
-app.post("/api/v1/shifts/open", async (c) => {
-    allow(c);
-    const b = z
-        .object({
-        opening_cash: z.coerce.number().int().min(0),
-        outlet_id: z.string(),
-    })
-        .parse(await c.req.json()), r = c.get("repo");
-    if ((await r.records("shift")).some((s) => s.user === c.get("user") && !s.closed_at))
-        fail("SHIFT_OPEN", "Tutup shift sebelumnya terlebih dahulu");
-    await r.batch([
-        r.record("shift", { ...b, user: c.get("user"), opened_at: Date.now() }),
-        r.audit(c.get("user"), "shift.opened"),
-    ]);
-    return output(c, true);
+app.post('/api/v1/shifts/:id/close', async c => {
+    allow(c);return output(c,await closeShift(c.get('repo'),c.req.param('id'),await c.req.json(),c.get('user')));
 });
-app.post("/api/v1/shifts/:id/close", async (c) => {
-    allow(c);
-    const b = z
-        .object({
-        closing_cash: z.coerce.number().int().min(0),
-        note: z.string(),
-    })
-        .parse(await c.req.json()), r = c.get("repo"), id = c.req.param("id"), s = (await r.records("shift")).find((s) => s.id === id);
-    if (!s || s.closed_at)
-        fail("NOT_FOUND", "Shift aktif tidak ditemukan", 404);
-    if (c.get("member").role !== "owner" && s.user !== c.get("user"))
-        fail("FORBIDDEN", "Shift dimiliki kasir lain", 403);
-    const cash = await r.first("SELECT COALESCE(SUM(p.amount),0) AS n FROM payments p JOIN bookings b ON b.id=p.booking_id WHERE p.method='cash' AND p.status='confirmed' AND p.kind<>'refund' AND p.created_at>=? AND b.outlet_id=?", s.opened_at, s.outlet_id);
-    const expected = s.opening_cash + cash.n;
-    await r.batch([
-        r.stmt("UPDATE records SET data=?1 WHERE id=?2", JSON.stringify({
-            ...s,
-            ...b,
-            expected_cash: expected,
-            difference: b.closing_cash - expected,
-            closed_at: Date.now(),
-        }), id),
-        r.audit(c.get("user"), "shift.closed", id),
-    ]);
-    return output(c, true);
+app.post('/api/v1/shifts/:id/expenses', async c => {
+    allow(c);return output(c,await cashExpense(c.get('repo'),c.req.param('id'),await c.req.json(),c.get('user'),c.req.header('Idempotency-Key')||''));
 });
-app.post("/api/v1/settlements", async (c) => {
-    allow(c, ["owner"]);
-    const b = z
-        .object({
-        partner_id: z.string(),
-        deductions: z.coerce.number().int().min(0),
-        note: z.string(),
-    })
-        .parse(await c.req.json()), r = c.get("repo");
-    const partner = (await r.records("partner")).find((p) => p.id === b.partner_id);
-    if (!partner)
-        fail("NOT_FOUND", "Mitra tidak ditemukan", 404);
-    const due = await r.all("SELECT l.* FROM ledger l WHERE l.account='partner_payable' AND l.direction='out' AND EXISTS(SELECT 1 FROM items i JOIN units u ON u.id=i.unit_id WHERE i.booking_id=l.booking_id AND u.partner_id=? AND l.reference='partner-'||i.id) AND NOT EXISTS(SELECT 1 FROM records rr,json_each(json_extract(rr.data,'$.entries')) jj WHERE rr.kind='settlement' AND jj.value=l.id)", b.partner_id);
-    const gross = due.reduce((s, l) => s + l.amount, 0);
-    if (!gross || b.deductions > gross)
-        fail("INVALID_SETTLEMENT", "Tidak ada saldo tersedia atau potongan melebihi saldo");
-    const id = uid(), net = gross - b.deductions;
-    await r.batch([
-        r.record("settlement", {
-            ...b,
-            gross,
-            net,
-            status: "paid",
-            entries: due.map((l) => l.id),
-            paid_at: Date.now(),
-        }, id),
-        ...(net
-            ? [
-                r.insert("ledger", {
-                    id: uid(),
-                    account: "partner_settlement",
-                    direction: "out",
-                    amount: net,
-                    reference: id,
-                    note: "Settlement " + partner.name,
-                    created_at: Date.now(),
-                }),
-            ]
-            : []),
-        ...due.map((l) => r.stmt("INSERT INTO operation_keys(key) VALUES(?)", "settled-" + l.id)),
-        r.audit(c.get("user"), "partner.settled", id),
-    ]);
-    return output(c, { id });
+app.post('/api/v1/settlements', async c => {
+    allow(c,['owner']);return output(c,await createSettlement(c.get('repo'),await c.req.json(),c.get('user'),c.req.header('Idempotency-Key')||''));
+});
+app.post('/api/v1/settlements/:id/pay', async c => {
+    allow(c,['owner']);return output(c,await paySettlement(c.get('repo'),c.req.param('id'),c.get('user')));
+});
+app.get('/api/v1/fine-components', async c => {
+    allow(c,['owner','admin','warehouse']);return output(c,await c.get('repo').records('fine_component'));
+});
+app.post('/api/v1/fine-components', async c => {
+    allow(c,['owner']);return output(c,await saveFineComponent(c.get('repo'),await c.req.json(),c.get('user')));
+});
+app.patch('/api/v1/fine-components/:id', async c => {
+    allow(c,['owner']);return output(c,await saveFineComponent(c.get('repo'),await c.req.json(),c.get('user'),c.req.param('id')));
 });
 app.post("/api/v1/fines/:id/waive", async (c) => {
     allow(c, ["owner"]);
@@ -1065,6 +988,7 @@ app.get("/admin/bookings/:id/print", async (c) => {
         fail("NOT_FOUND", "Booking tidak ditemukan", 404);
     const items = await r.all("SELECT * FROM items WHERE booking_id=? AND voided_at IS NULL", b.id);
     const type = c.req.query("type") || "invoice";
+    if(type==='thermal')return c.html(thermalReceipt(await receiptData(r,b.id),c.get('store'),paperWidth.parse(c.req.query('width')||'58')));
     const title = ({
         invoice: "Invoice Penyewaan",
         receipt: "Nota Pembayaran",
@@ -1101,7 +1025,7 @@ async function storefront(c:any, page:string) {
     const store=await loadStore(c.env.DB), r=new Repo(c.env.DB,{role:"guest"});
     await expire(r);
     const {qris_payload, ...settings}=store.settings;
-    const data={store:{name:store.name,settings},products:await r.all("SELECT id,name,category,brand,description,price,image,images,capacity FROM products WHERE deleted_at IS NULL AND published=1"),bundles:await r.records("bundle"),outlets:await r.records("outlet")};
+    const data={store:{name:store.name,settings},products:await r.all("SELECT id,name,category,brand,description,price,image,images,capacity FROM products WHERE deleted_at IS NULL AND published=1"),bundles:(await r.records("bundle")).filter(b=>b.active!==false),outlets:await r.records("outlet")};
     return c.html(storeShell(data,storePage(data,page)));
 }
 app.get("/", c=>storefront(c,"home"));
@@ -1110,6 +1034,9 @@ app.get("/product/:id", c=>storefront(c,"product"));
 app.get("/guide", c=>storefront(c,"guide"));
 app.get("/terms", c=>storefront(c,"terms"));
 app.get("/lookup", c=>storefront(c,"lookup"));
+cashierRoutes(app);
+inventoryRoutes(app);
+operationsRoutes(app,upload);
 app.get("/admin/*", async (c) => {
     if(!await requireSession(c,false))return c.redirect("/login");
     const data = await bootstrap(c);

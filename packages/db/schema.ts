@@ -33,7 +33,10 @@ export const records=sqliteTable('records',{
   data: text('data').notNull(),
   deleted_at: integer('deleted_at'),
   created_at: integer('created_at').notNull(),
-},t=>[index('records_business').on(t.kind,t.deleted_at)]);
+},t=>[index('records_business').on(t.kind,t.deleted_at),
+  uniqueIndex('shift_active_user').on(sql`json_extract(${t.data},'$.user')`).where(sql`kind='shift' AND deleted_at IS NULL AND json_extract(data,'$.closed_at') IS NULL`),
+  uniqueIndex('settlement_idempotency').on(sql`json_extract(${t.data},'$.idempotency_key')`).where(sql`kind='settlement'`),
+]);
 
 export const products=sqliteTable('products',{
   id: text('id').primaryKey(),
@@ -125,6 +128,7 @@ export const reservations=sqliteTable('reservations',{
 export const payments=sqliteTable('payments',{
   id: text('id').primaryKey(),
   booking_id: text('booking_id').notNull().references(()=>bookings.id),
+  shift_id: text('shift_id').references(()=>records.id),
   amount: integer('amount').notNull(),
   method: text('method').notNull(),
   kind: text('kind').notNull().default('rental'),
@@ -132,7 +136,7 @@ export const payments=sqliteTable('payments',{
   proof: text('proof'),
   idem: text('idem').notNull(),
   created_at: integer('created_at').notNull(),
-},t=>[check('payments_constraint_0',sql`amount>0`),index('payments_business').on(t.status,t.booking_id),uniqueIndex('ux_payments_idem').on(t.idem)]);
+},t=>[check('payments_constraint_0',sql`amount>0`),index('payments_shift').on(t.shift_id,t.status),index('payments_business').on(t.status,t.booking_id),uniqueIndex('ux_payments_idem').on(t.idem)]);
 
 export const ledger=sqliteTable('ledger',{
   id: text('id').primaryKey(),
@@ -144,6 +148,11 @@ export const ledger=sqliteTable('ledger',{
   note: text('note'),
   created_at: integer('created_at').notNull(),
 },t=>[check('ledger_constraint_0',sql`direction IN('in','out')`),check('ledger_constraint_1',sql`amount>0`),index('ledger_business').on(t.created_at),uniqueIndex('ux_ledger_reference').on(t.reference)]);
+
+export const settlementEntries=sqliteTable('settlement_entries',{
+  ledger_id:text('ledger_id').primaryKey().references(()=>ledger.id),
+  settlement_id:text('settlement_id').notNull().references(()=>records.id),
+},t=>[index('settlement_entries_parent').on(t.settlement_id)]);
 
 export const statusLogs=sqliteTable('status_logs',{
   id: text('id').primaryKey(),

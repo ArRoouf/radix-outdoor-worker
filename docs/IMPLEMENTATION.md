@@ -10,6 +10,8 @@ Aplikasi melayani satu bisnis Radix Outdoor. Cabang adalah outlet bisnis yang sa
 - Pembayaran tunai/transfer/QRIS dengan konfirmasi manual; bukti bayar privat.
 - Pickup, inspeksi, foto/tanda tangan, jaminan identitas, pengembalian parsial, denda, dan penutupan.
 - Ledger append-only, kas/shift, pengeluaran, pelanggan/blacklist, voucher, konsinyasi, settlement, dan laporan CSV/XLSX.
+- Penerimaan tunai terhubung shift aktif kasir; pengeluaran laci dan penutupan dihitung per shift. Settlement mendukung periode, draft yang mengunci payable, dan konfirmasi paid idempotent. Master komponen denda disalin sebagai snapshot per unit saat pengembalian.
+- Opname draft dengan versi, snapshot unit, simpan progres dan finalisasi; penyesuaian hilang opsional oleh Owner. Penarikan konsinyasi mencatat bukti serah-terima dan menjaga histori unit. Paket mendukung aktif/nonaktif serta jumlah paket di kasir/checkout server. Kasir mendukung input kode unit ke keranjang dan struk ringkas 58/80 mm.
 - Login email/password staf dan mitra, sesi lokal aplikasi, CSRF, rate limit, pencabutan sesi, serta akses outlet/mitra dari sesi server.
 - R2 dipisah menjadi binding foto publik dan dokumen privat. Akses dokumen memerlukan izin dan menghasilkan tautan berumur lima menit; akses dicatat.
 - Cron → Queue untuk housekeeping dan backup JSON; backup dapat dipulihkan dan diverifikasi secara offline.
@@ -27,6 +29,8 @@ Migrasi lama 0001–0005 dipertahankan sebagai histori. Migrasi 0006 menghapus t
 PRD tetap menjadi target produk; perubahan single tenant ini tidak menyatakan seluruh roadmap telah selesai.
 
 - Form login, checkout dasar, dan lookup dapat dipakai tanpa JavaScript. Ringkasan quote dapat diperbarui lewat HTMX. Sejumlah layar admin dan keranjang yang sudah ada masih memakai enhancement JavaScript untuk formulir/modal, filter, serta grafik; konversi penuh semua layar ke fragmen Hono JSX/HTMX belum selesai.
+- Form server untuk shift, settlement, komponen denda dan pengembalian tersedia tanpa JavaScript. Revisi/pembatalan draft settlement dan refund dari laci tunai belum ditambahkan; refund yang tersedia memakai transfer.
+- Form opname, paket, penarikan dan kasir juga tersedia tanpa JavaScript. Scan kasir menggunakan kode unit dari input/pemindai keyboard; generator barcode kategori/mitra serta integrasi printer Bluetooth belum tersedia. Pemindai dan printer fisik belum diuji.
 - Email otomatis dan reset password lewat email membutuhkan provider email. Saat ini Owner membuat atau mengatur ulang password staf melalui pengaturan akses; pengguna dapat mengganti password sendiri. Tidak ada email palsu yang dinyatakan terkirim.
 - PDF remote tersedia bila token Browser Rendering dikonfigurasi; tanpa token, unduhan diarahkan ke halaman cetak browser. Validasi hasil PDF remote perlu dilakukan pada akun Cloudflare nyata.
 - Role masih tetap (Owner/Admin/Gudang/Mitra); editor permission granular per pengguna dan 2FA belum tersedia.

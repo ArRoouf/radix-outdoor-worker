@@ -1,4 +1,21 @@
 export const DAY = 86400000;
+export function bundleSelection(items:{product_id:string;qty:number}[],quantity:number) {
+  if(!Number.isSafeInteger(Number(quantity))||Number(quantity)<1||Number(quantity)>100)throw new Error('Jumlah paket harus bilangan bulat antara 1 dan 100');
+  return items.map(item=>{
+    const qty=item.qty*Number(quantity);
+    if(!Number.isSafeInteger(qty)||qty<1||qty>100)throw new Error('Maksimal 100 unit per komponen produk');
+    return {...item,qty};
+  });
+}
+export function componentCharges(lines: {amount:number;qty:number}[]) {
+  let total=0;
+  for(const line of lines) {
+    if(!Number.isSafeInteger(line.amount)||line.amount<0||!Number.isSafeInteger(line.qty)||line.qty<1)throw new Error('Nominal dan jumlah komponen tidak valid');
+    total+=line.amount*line.qty;
+    if(!Number.isSafeInteger(total))throw new Error('Total komponen melebihi batas rupiah');
+  }
+  return total;
+}
 export function duration(start: number, end: number, tolerance = 60) {
   if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start)
     throw new Error("Rentang tanggal tidak valid");

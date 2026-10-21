@@ -42,7 +42,7 @@ export async function requireSession(c:any,required=true) {
 export async function csrfCheck(c:any) {
   if(['GET','HEAD','OPTIONS'].includes(c.req.method))return;
   let token=c.req.header('x-csrf-token');
-  if(!token&&c.req.header('content-type')?.includes('application/x-www-form-urlencoded'))token=(await c.req.parseBody()).csrf;
+  if(!token&&/application\/x-www-form-urlencoded|multipart\/form-data/.test(c.req.header('content-type')||''))token=(await c.req.parseBody()).csrf;
   if(!token||!equal(String(token),String(c.get('csrf')||'')))fail('CSRF','Formulir kedaluwarsa. Muat ulang halaman.',403);
 }
 const credentials=z.object({email:z.string().email().max(254).transform(s=>s.toLowerCase()),password:z.string().min(12).max(128)});

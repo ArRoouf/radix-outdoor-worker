@@ -1,13 +1,9 @@
 import { Repo, uid } from "../repo/index";
-import { DAY, duration, downPayment, priceLine, lateFee, assertTransition, share, } from "../../../../packages/shared/pricing";
-export class DomainError extends Error {
-    constructor(public code: string, message: string, public status = 400) {
-        super(message);
-    }
-}
-export const fail = (code: string, message: string, status = 400): never => {
-    throw new DomainError(code, message, status);
-};
+import { DAY, bundleSelection, duration, downPayment, priceLine, lateFee, assertTransition, share, } from "../../../../packages/shared/pricing";
+import { fail } from './errors';
+import { activeCashShift } from './cash';
+import { snapshotComponents } from './fines';
+export { DomainError, fail } from './errors';
 export async function expire(r: Repo) {
     const now = Date.now();
     await r.batch([
@@ -23,9 +19,10 @@ export async function quote(r: Repo, settings: any, body: any, excludeBookingId:
     let requested = body.items || [];
     if (body.bundle_id) {
         const bundle = (await r.records("bundle")).find((b) => b.id === body.bundle_id);
-        if (!bundle)
-            fail("NOT_FOUND", "Paket tidak ditemukan", 404);
-        requested = bundle.items;
+        if (!bundle || bundle.active === false)
+            fail("NOT_FOUND", "Paket tidak aktif atau tidak ditemukan", 404);
+        try { requested = bundleSelection(bundle.items, body.bundle_qty ?? 1); }
+        catch(e) { fail('INVALID_QTY',(e as Error).message,422); }
     }
     if (!Array.isArray(requested) || !requested.length || requested.length > 50)
         fail("EMPTY_CART", "Pilih setidaknya satu produk");
@@ -59,7 +56,9 @@ export async function quote(r: Repo, settings: any, body: any, excludeBookingId:
     let voucher: any = null;
     if (body.bundle_id) {
         const b = (await r.records("bundle")).find((b) => b.id === body.bundle_id);
-        discount = Math.max(0, subtotal - b.price * days);
+        const packageTotal=b.price*days*Number(body.bundle_qty??1);
+        if(!Number.isSafeInteger(packageTotal))fail("INVALID_AMOUNT","Harga paket melebihi batas rupiah");
+        discount = Math.max(0, subtotal - packageTotal);
     }
     if (body.voucher_code) {
         voucher = (await r.records("voucher")).find((v) => v.code.toUpperCase() === String(body.voucher_code).toUpperCase() &&
@@ -118,7 +117,7 @@ export async function createBooking(r: Repo, settings: any, body: any, idem: str
         const id = uid(), cid = customer?.id || uid(), now = Date.now(), code = "RX-" +
             new Date().toISOString().slice(2, 7).replace("-", "") +
             "-" +
-            uid().replace(/-/g, "").slice(0, 10).toUpperCase();
+            uid().replace(/-/g, "").slice(-12).toUpperCase();
         const dp = q.dp;
         const amount = publicBooking ? 0 : Number(body.paid) || 0;
         if (amount > q.total)
@@ -184,9 +183,12 @@ export async function createBooking(r: Repo, settings: any, body: any, idem: str
         }
         if (amount) {
             const pid = uid();
+            if(!['cash','transfer','qris'].includes(body.method || 'cash'))fail('INVALID_METHOD','Metode pembayaran tidak valid');
+            const shift = (body.method || 'cash') === 'cash' ? await activeCashShift(r,b.outlet_id,user) : null;
             statements.push(r.insert("payments", {
                 id: pid,
                 booking_id: id,
+                shift_id: shift?.id || null,
                 amount,
                 method: body.method || "cash",
                 status: "confirmed",
@@ -257,9 +259,11 @@ export async function payment(r: Repo, bid: string, body: any, idem: string, use
     if (!["cash", "transfer", "qris"].includes(body.method))
         fail("INVALID_METHOD", "Metode pembayaran tidak valid");
     const id = uid(), now = Date.now();
+    const shift = confirm && body.method === "cash" ? await activeCashShift(r,b.outlet_id,user) : null;
     const p = {
         id,
         booking_id: bid,
+        shift_id: shift?.id || null,
         amount,
         method: body.method,
         status: confirm ? "confirmed" : "pending",
@@ -302,10 +306,11 @@ export async function confirmPayment(r: Repo, id: string, user: string, reject =
         ]);
         return;
     }
+    const shift = p.method === "cash" ? await activeCashShift(r,b.outlet_id,user) : null;
     const stmts = [
         r.stmt("INSERT INTO operation_keys(key) VALUES(?)", "confirm-" + id),
         r.stmt("UPDATE bookings SET paid=paid+?1,status=CASE WHEN status='pending_payment' AND paid+?1>=dp THEN 'confirmed' ELSE status END WHERE id=?2", p.amount, b.id),
-        r.stmt("UPDATE payments SET status='confirmed' WHERE id=?", id),
+        r.stmt("UPDATE payments SET status='confirmed',shift_id=?1 WHERE id=?2", shift?.id || null, id),
         r.insert("ledger", {
             id: uid(),
             booking_id: b.id,
@@ -424,8 +429,11 @@ export async function bookingAction(r: Repo, settings: any, bid: string, action:
                 fail("INVALID_AMOUNT", "Biaya kerusakan tidak valid");
             if (condition !== "good" && (!body.note || !body.photo))
                 fail("EVIDENCE_REQUIRED", "Kondisi rusak/hilang memerlukan catatan dan foto");
+            const component = await snapshotComponents(r,body.components?.[i.id],condition,condition === 'lost' ? 0 : damage);
+            for(const f of component.snapshots) if(f.amount)stmts.push(r.record('fine',{...f,booking_id:bid,item_id:i.id}));
             const late = lateFee(b.end_at, now, settings.late_price, 1, settings.tolerance);
-            fines += late + damage;
+            fines += late + damage + component.total;
+            if(!Number.isSafeInteger(fines)||!Number.isSafeInteger(b.total+fines))fail('INVALID_AMOUNT','Total denda melebihi batas rupiah');
             stmts.push(r.stmt("UPDATE items SET returned_at=?1,condition=?2 WHERE id=?3", now, condition, i.id), r.record("inspection", {
                 booking_id: bid,
                 item_id: i.id,
@@ -436,6 +444,7 @@ export async function bookingAction(r: Repo, settings: any, bid: string, action:
                 photo: body.photo || null,
                 late,
                 damage,
+                components: component.snapshots,
             }), r.record("movement", {
                 unit_id: i.unit_id,
                 kind: "in",

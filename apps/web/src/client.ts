@@ -158,7 +158,7 @@ const quoteBox = (q: any) => `<div class="quote-summary"><div><span>Durasi sewa<
 async function openBooking(id: string) {
     lastBooking = await api("/api/v1/bookings/" + id);
     const b = lastBooking, s = shownStatus(b);
-    modal("Detail booking", `<div class="booking-detail-summary"><div><h3>${esc(b.code)}</h3><p>${esc(b.customer_name)} · ${esc(b.customer_phone)}</p></div>${status(s)}</div><div class="detail-grid"><div><small>TANGGAL AMBIL</small><strong>${new Date(b.start_at).toLocaleString("id-ID")}</strong></div><div><small>TANGGAL KEMBALI</small><strong>${new Date(b.end_at).toLocaleString("id-ID")}</strong></div><div><small>TOTAL TAGIHAN</small><strong>${d.member.role === "warehouse" ? "Akses kasir" : money(b.total)}</strong></div><div><small>SISA PEMBAYARAN</small><strong class="${b.total > b.paid ? "orange-text" : "green-text"}">${d.member.role === "warehouse" ? "Akses kasir" : money(b.total - b.paid)}</strong></div></div><h3 class="section-subtitle">Perlengkapan sewa</h3><div class="table-scroll"><table class="data-table"><thead><tr><th>Produk / unit</th><th>Durasi</th><th>Harga sewa</th><th>Kondisi</th></tr></thead><tbody>${b.items.map((i: any) => `<tr><td><strong>${esc(i.product_name)}</strong><small>${esc(i.code)}</small></td><td>${i.days} hari</td><td>${money(i.total)}</td><td>${i.returned_at ? '<span class="green-text">Sudah kembali</span>' : "Belum kembali"}</td></tr>`).join("")}</tbody></table></div><div class="notice" style="margin-top:20px">${icon("shield", 20)}<span>Jaminan: ${b.collateral === "held" ? "Identitas sedang ditahan" : b.collateral === "returned" ? "Identitas sudah dikembalikan" : "KTP/SIM diterima saat pengambilan"}</span></div>${b.note ? `<p class="field-hint">Catatan: ${esc(b.note)}</p>` : ""}<div class="detail-actions">${b.total > b.paid && !["expired", "cancelled", "completed"].includes(b.status) && d.member.role !== "warehouse" ? `<button class="btn primary" data-booking-action="pay">${icon("wallet", 16)}Catat pembayaran</button>` : ""}${b.status === "confirmed" ? `<button class="btn primary" data-booking-action="pickup">${icon("products", 16)}Serah-terima</button>` : ""}${b.status === "picked_up" ? `<button class="btn primary" data-booking-action="return">${icon("return", 16)}Proses pengembalian</button>` : ""}${b.status === "returned" && d.member.role !== "warehouse" ? `<button class="btn primary" data-booking-action="complete">${icon("check", 16)}Selesaikan booking</button>` : ""}${["pending_payment", "confirmed"].includes(b.status) && d.member.role !== "warehouse" ? '<button class="btn" data-edit-booking>Ubah booking</button>' : ""}${["confirmed", "picked_up"].includes(b.status) ? '<button class="btn" data-booking-action="extend">Perpanjang</button>' : ""}${d.member.role !== "warehouse" ? `<a class="btn" href="/admin/bookings/${b.id}/pdf" target="_blank">${icon("download", 16)}Invoice / PDF</a><a class="btn" href="/admin/bookings/${b.id}/print?type=agreement" target="_blank">Perjanjian sewa</a><a class="btn" href="/admin/bookings/${b.id}/print?type=delivery" target="_blank">Surat jalan</a><a class="btn" href="/admin/bookings/${b.id}/print?type=receipt" target="_blank">Nota pembayaran</a><a class="btn" href="https://wa.me/${esc(b.customer_phone)}?text=${encodeURIComponent(`Halo ${b.customer_name}, informasi booking ${b.code} di ${d.store.name}. Ambil: ${new Date(b.start_at).toLocaleString("id-ID")}. Kembali: ${new Date(b.end_at).toLocaleString("id-ID")}. Sisa tagihan: ${money(b.total - b.paid)}.`)}" target="_blank">${icon("customers", 16)}WhatsApp</a>` : ""}${["confirmed", "pending_payment"].includes(b.status) && d.member.role !== "warehouse" ? '<button class="btn danger" data-booking-action="cancel">Batalkan</button>' : ""}</div><h3 class="section-subtitle">Denda & biaya tambahan</h3><div class="simple-list">${(d.records.fine || [])
+    modal("Detail booking", `<div class="booking-detail-summary"><div><h3>${esc(b.code)}</h3><p>${esc(b.customer_name)} · ${esc(b.customer_phone)}</p></div>${status(s)}</div><div class="detail-grid"><div><small>TANGGAL AMBIL</small><strong>${new Date(b.start_at).toLocaleString("id-ID")}</strong></div><div><small>TANGGAL KEMBALI</small><strong>${new Date(b.end_at).toLocaleString("id-ID")}</strong></div><div><small>TOTAL TAGIHAN</small><strong>${d.member.role === "warehouse" ? "Akses kasir" : money(b.total)}</strong></div><div><small>SISA PEMBAYARAN</small><strong class="${b.total > b.paid ? "orange-text" : "green-text"}">${d.member.role === "warehouse" ? "Akses kasir" : money(b.total - b.paid)}</strong></div></div><h3 class="section-subtitle">Perlengkapan sewa</h3><div class="table-scroll"><table class="data-table"><thead><tr><th>Produk / unit</th><th>Durasi</th><th>Harga sewa</th><th>Kondisi</th></tr></thead><tbody>${b.items.map((i: any) => `<tr><td><strong>${esc(i.product_name)}</strong><small>${esc(i.code)}</small></td><td>${i.days} hari</td><td>${money(i.total)}</td><td>${i.returned_at ? '<span class="green-text">Sudah kembali</span>' : "Belum kembali"}</td></tr>`).join("")}</tbody></table></div><div class="notice" style="margin-top:20px">${icon("shield", 20)}<span>Jaminan: ${b.collateral === "held" ? "Identitas sedang ditahan" : b.collateral === "returned" ? "Identitas sudah dikembalikan" : "KTP/SIM diterima saat pengambilan"}</span></div>${b.note ? `<p class="field-hint">Catatan: ${esc(b.note)}</p>` : ""}<div class="detail-actions">${b.total > b.paid && !["expired", "cancelled", "completed"].includes(b.status) && d.member.role !== "warehouse" ? `<button class="btn primary" data-booking-action="pay">${icon("wallet", 16)}Catat pembayaran</button>` : ""}${b.status === "confirmed" ? `<button class="btn primary" data-booking-action="pickup">${icon("products", 16)}Serah-terima</button>` : ""}${b.status === "picked_up" ? `<a class="btn primary" href="/admin/bookings/${b.id}/return">${icon("return", 16)}Proses pengembalian</a>` : ""}${b.status === "returned" && d.member.role !== "warehouse" ? `<button class="btn primary" data-booking-action="complete">${icon("check", 16)}Selesaikan booking</button>` : ""}${["pending_payment", "confirmed"].includes(b.status) && d.member.role !== "warehouse" ? '<button class="btn" data-edit-booking>Ubah booking</button>' : ""}${["confirmed", "picked_up"].includes(b.status) ? '<button class="btn" data-booking-action="extend">Perpanjang</button>' : ""}${d.member.role !== "warehouse" ? `<a class="btn" href="/admin/bookings/${b.id}/pdf" target="_blank">${icon("download", 16)}Invoice / PDF</a><a class="btn" href="/admin/bookings/${b.id}/print?type=agreement" target="_blank">Perjanjian sewa</a><a class="btn" href="/admin/bookings/${b.id}/print?type=delivery" target="_blank">Surat jalan</a><a class="btn" href="/admin/bookings/${b.id}/print?type=receipt" target="_blank">Nota pembayaran</a><a class="btn" href="https://wa.me/${esc(b.customer_phone)}?text=${encodeURIComponent(`Halo ${b.customer_name}, informasi booking ${b.code} di ${d.store.name}. Ambil: ${new Date(b.start_at).toLocaleString("id-ID")}. Kembali: ${new Date(b.end_at).toLocaleString("id-ID")}. Sisa tagihan: ${money(b.total - b.paid)}.`)}" target="_blank">${icon("customers", 16)}WhatsApp</a>` : ""}${["confirmed", "pending_payment"].includes(b.status) && d.member.role !== "warehouse" ? '<button class="btn danger" data-booking-action="cancel">Batalkan</button>' : ""}</div><h3 class="section-subtitle">Denda & biaya tambahan</h3><div class="simple-list">${(d.records.fine || [])
         .filter((f: any) => f.booking_id === b.id)
         .map((f: any) => `<div><span><strong>${esc(f.kind)} · ${money(f.amount)}</strong><small>${esc(f.note || "")}</small></span>${f.waived ? status("cancelled") : d.member.role === "owner" ? `<button class="btn sm" data-waive-fine="${f.id}">Bebaskan denda</button>` : ""}</div>`)
         .join("") || '<p class="field-hint">Tidak ada denda.</p>'}</div><h3 class="section-subtitle">Pembayaran</h3><div class="simple-list">${b.payments.map((p: any) => `<div><span><strong>${money(p.amount)}</strong><small>${esc(p.method)} · ${esc(p.kind)}</small></span>${status(p.status === "confirmed" ? "completed" : p.status)}${p.proof ? `<a href="/api/v1/files/${p.proof}" target="_blank" class="btn sm">Bukti</a>` : ""}</div>`).join("") || '<p class="field-hint">Belum ada pembayaran.</p>'}</div><h3 class="section-subtitle">Riwayat booking</h3><div class="timeline">${b.logs.map((l: any) => `<div>${statusLabelsClient(l.status)}<small>${new Date(l.created_at).toLocaleString("id-ID")} · ${esc(l.note)}</small></div>`).join("")}</div>`, true);
@@ -187,7 +187,7 @@ function bookingActionForm(action: string) {
     else if (action === "return") {
         modal("Pengembalian alat", formHtml("return-form", `<p class="field-hint">Pilih unit yang dikembalikan. Unit lain tetap tercatat sedang disewa.</p>${b.items
             .filter((i: any) => !i.returned_at)
-            .map((i: any) => `<div class="inspection-unit"><label class="checkbox"><input type="checkbox" name="item_ids" value="${i.id}" checked><span><strong>${esc(i.code)}</strong> · ${esc(i.product_name)}</span></label><select name="condition_${i.id}" aria-label="Kondisi ${esc(i.code)}"><option value="good">Baik & lengkap</option><option value="minor">Rusak ringan</option><option value="damaged">Rusak berat</option><option value="lost">Hilang</option></select></div>`)
+            .map((i: any) => `<div class="inspection-unit"><label class="checkbox"><input type="checkbox" name="item_ids" value="${i.id}" checked><span><strong>${esc(i.code)}</strong> · ${esc(i.product_name)}</span></label><select name="condition_${i.id}" aria-label="Kondisi ${esc(i.code)}"><option value="good">Baik & lengkap</option><option value="minor">Rusak ringan</option><option value="damaged">Rusak berat</option><option value="lost">Hilang</option></select>${(d.records.fine_component || []).filter((f:any)=>f.active).map((f:any)=>`<label>${esc(f.name)} · ${money(f.amount)} / komponen<input type="number" min="0" max="100" value="0" data-fine-item="${i.id}" data-fine-component="${f.id}" aria-label="${esc(f.name)} untuk ${esc(i.code)}"></label>`).join('')}</div>`)
             .join("")}${field("damage", "Biaya kerusakan per unit (Rp)", "number", 0, true, 'min="0"')}${area("note", "Catatan pemeriksaan")}${field("photo", "Foto kondisi (wajib untuk kerusakan / hilang)", "file", "", false, 'accept="image/jpeg,image/png,image/webp"')}<div class="notice">Denda keterlambatan dihitung otomatis. Unit rusak masuk maintenance dan identitas ditahan sampai tagihan lunas.</div>`, "Simpan pengembalian"), true);
     }
     else if (action === "complete") {
@@ -436,9 +436,9 @@ function reports() {
     }
     if (kind === "partner")
         root.innerHTML = table(["Mitra", "Hak bagi hasil", "Potongan", "Settlement dibayar"], partners().map((p: any) => {
-            const s = (d.records.settlement || []).filter((s: any) => s.partner_id === p.id &&
-                s.created_at >= start &&
-                s.created_at < end);
+            const s = (d.records.settlement || []).filter((s: any) => s.partner_id === p.id && s.status === "paid" &&
+                (s.paid_at ?? s.created_at) >= start &&
+                (s.paid_at ?? s.created_at) < end);
             return [
                 esc(p.name),
                 money(s.reduce((n: number, s: any) => n + s.gross, 0)),
@@ -446,19 +446,6 @@ function reports() {
                 money(s.reduce((n: number, s: any) => n + s.net, 0)),
             ];
         }));
-}
-function shifts() {
-    const shifts = d.records.shift || [];
-    const active = shifts.find((s: any) => !s.closed_at);
-    modal("Kas & shift kasir", `${active
-        ? `<p class="field-hint">Shift dibuka ${new Date(active.opened_at).toLocaleString("id-ID")} · Modal ${money(active.opening_cash)}</p>${formHtml("close-shift", `<input name="id" type="hidden" value="${active.id}">${field("closing_cash", "Uang tunai fisik (Rp)", "number", active.opening_cash, true, 'min="0"')}${area("note", "Catatan selisih / penutupan")}`, "Tutup shift")}`
-        : formHtml("open-shift", `${field("opening_cash", "Modal awal kas (Rp)", "number", 0, true, 'min="0"')}${select("outlet_id", "Outlet", outlets().map((o: any) => [o.id, o.name]))}`, "Buka shift")}<h3 class="section-subtitle">Riwayat shift</h3><div class="simple-list">${shifts
-        .filter((s: any) => s.closed_at)
-        .map((s: any) => `<div><span><strong>${date(s.opened_at, true)}</strong><small>Ekspektasi ${money(s.expected_cash)} · Fisik ${money(s.closing_cash)}</small></span><span>Selisih ${money(s.difference)}</span></div>`)
-        .join("") || '<p class="field-hint">Belum ada shift yang ditutup.</p>'}</div>`);
-}
-function opname() {
-    modal("Stok opname", formHtml("opname-form", `<p class="field-hint">Centang unit yang ditemukan secara fisik. Selisih dicatat dan tidak langsung mengubah status unit.</p><div class="manual-items">${d.units.map((u: any) => `<label class="checkbox"><input name="present" type="checkbox" value="${u.id}" checked><span><strong>${esc(u.code)}</strong> · ${esc(d.products.find((p: any) => p.id === u.product_id)?.name)}</span></label>`).join("")}</div>${area("note", "Catatan hasil opname")}`, "Simpan hasil opname"), true);
 }
 function customerDetail(id: string) {
     const c = d.customers.find((c: any) => c.id === id);
@@ -556,14 +543,13 @@ async function action(name: string) {
         "new-voucher": "voucher",
         "new-expense": "expense",
         "new-price-rule": "price_rule",
-        "new-bundle": "bundle",
         "new-maintenance": "maintenance",
         "new-member": "member",
     };
     if (mapping[name])
         return genericForm(mapping[name]);
-    if (name === "new-booking")
-        return newBooking();
+    if (name === "new-bundle")return location.assign('/admin/packages');
+    if (name === "new-booking")return location.assign('/admin/kasir');
     if (name === "new-product")
         return productForm();
     if (name === "quote-manual") {
@@ -599,9 +585,9 @@ async function action(name: string) {
         return;
     }
     if (name === "shifts")
-        return shifts();
+        return location.assign('/admin/cash-shifts');
     if (name === "opname")
-        return opname();
+        return location.assign('/admin/opnames');
     if (name === "help")
         return modal("Pusat bantuan", `<div class="notice">Mulai dari katalog → booking → pembayaran → serah-terima → pengembalian → selesai.</div><h3 class="section-subtitle">Panduan cepat</h3><p>1. Atur profil, rekening, dan kebijakan sewa di Pengaturan.<br>2. Tambahkan produk beserta unit fisiknya.<br>3. Bagikan storefront untuk menerima booking online.<br>4. Konfirmasikan pembayaran dan lakukan checklist saat alat diambil serta kembali.</p><h3 class="section-subtitle">Pembayaran & jaminan</h3><p>Pembayaran v1 diverifikasi manual. Jaminan berupa identitas asli, tanpa deposit uang. Ledger disimpan tetap untuk pelacakan keuangan.</p><a class="btn full" style="margin-top:25px" href="/guide" target="_blank">Buka FAQ penyewa ${icon("external", 15)}</a>`);
     if (name === "print-report") {
@@ -708,7 +694,7 @@ document.addEventListener("click", (e) => {
         return;
     }
     if (ds.settlement) {
-        modal("Settlement bagi hasil", formHtml("settlement-form", `<input type="hidden" name="partner_id" value="${ds.settlement}"><p class="field-hint">Bagian mitra dihitung otomatis dari booking selesai yang belum disettlement.</p>${field("deductions", "Potongan perbaikan (Rp)", "number", 0, true, 'min="0"')}${area("note", "Catatan pembayaran")}<label class="checkbox"><input type="checkbox" required><span>Pembayaran ke mitra telah dilakukan dan nominal sesuai kesepakatan.</span></label>`, "Catat settlement"));
+        location.assign('/admin/settlements?partner_id='+encodeURIComponent(ds.settlement));
         return;
     }
     if(ds.memberEdit) {
@@ -882,6 +868,12 @@ document.addEventListener("submit", (e) => {
                 for (const key of Object.keys(v))
                     if (key.startsWith("condition_"))
                         body.conditions[key.slice(10)] = v[key];
+                body.components = {};
+                for(const input of $$("[data-fine-item]",form)) {
+                    if(Number(input.value)>0 && body.item_ids.includes(input.dataset.fineItem)) {
+                        (body.components[input.dataset.fineItem] ||= []).push({component_id:input.dataset.fineComponent,qty:Number(input.value)});
+                    }
+                }
                 body.damage = Number(v.damage);
                 body.photo = await uploadInput($("[name=photo]", form));
             }
@@ -989,21 +981,6 @@ document.addEventListener("submit", (e) => {
         else if (form.id === "close-shift") {
             await api("/api/v1/shifts/" + v.id + "/close", v);
             await done("Shift ditutup dan selisih dicatat");
-        }
-        else if (form.id === "opname-form") {
-            const present = new FormData(form).getAll("present");
-            await api("/api/v1/stock/opname", {
-                note: v.note,
-                units: d.units.map((u: any) => ({
-                    id: u.id,
-                    present: present.includes(u.id),
-                })),
-            });
-            await done("Hasil stok opname tersimpan");
-        }
-        else if (form.id === "settlement-form") {
-            await api("/api/v1/settlements", v);
-            await done("Settlement dibayar dan tercatat");
         }
         else if (form.id === "scan-form") {
             const book = d.bookings.find((b: any) => b.code.toLowerCase() === v.code.toLowerCase());

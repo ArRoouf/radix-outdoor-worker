@@ -16,6 +16,7 @@ const tables = [
     "uploads",
     "operation_keys",
     "users",
+    "settlement_entries",
 ];
 export async function backup(r: Repo, bucket: R2Bucket) {
     const data: Record<string, any> = {

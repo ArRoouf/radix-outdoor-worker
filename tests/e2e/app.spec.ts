@@ -1,4 +1,58 @@
 import { test, expect } from '@playwright/test';
+test('opname, paket, penarikan dan kasir barcode berjalan tanpa JavaScript di HP',async({browser})=>{
+ const context=await browser.newContext({javaScriptEnabled:false,viewport:{width:390,height:844}}),page=await context.newPage(),base='http://127.0.0.1:4174';
+ await page.goto(base+'/login');await page.getByLabel('Email',{exact:true}).fill('owner@example.test');await page.getByLabel('Kata sandi',{exact:true}).fill('E2E-only-password-7321');await page.getByRole('button',{name:'Masuk',exact:true}).click();
+ await page.goto(base+'/admin/opnames');await page.getByLabel('Catatan audit',{exact:true}).fill('Audit persediaan uji HP');await page.getByRole('button',{name:'Buat draft opname',exact:true}).click();
+ const checks=page.getByLabel(/^Hasil pemeriksaan /);for(let i=0;i<await checks.count();i++)await checks.nth(i).selectOption('present');
+ await page.getByRole('button',{name:'Simpan progres opname',exact:true}).click();await page.getByRole('button',{name:'Finalisasi opname',exact:true}).click();await expect(page.getByRole('heading',{name:'Hasil opname final',exact:true})).toBeVisible();await expect(page.getByRole('button',{name:'Simpan progres opname',exact:true})).toHaveCount(0);
+ await page.goto(base+'/admin/packages');const create=page.getByRole('heading',{name:'Tambah paket sewa',exact:true}).locator('..');
+ await create.getByLabel('Nama paket',{exact:true}).fill('Paket Uji HP');await create.getByLabel('Harga paket per hari (Rp)',{exact:true}).fill('25000');await create.getByLabel('Carrier Eiger Equator 60L per paket',{exact:true}).fill('1');await create.getByRole('button',{name:'Tambah paket',exact:true}).click();
+ const data=(await (await context.request.get(base+'/api/v1/bootstrap')).json()).data,bundle=data.records.bundle.find((b:any)=>b.name==='Paket Uji HP');
+ await page.goto(base+'/checkout?bundle='+bundle.id);await expect(page.getByLabel('Paket sewa (opsional)',{exact:true})).toHaveValue(bundle.id);await page.getByLabel('Jumlah',{exact:true}).fill('2');
+ const start=Date.now()+65*86400000;await page.getByLabel('Ambil (Asia/Jakarta)',{exact:true}).fill(new Date(start).toISOString().slice(0,16));await page.getByLabel('Kembali',{exact:true}).fill(new Date(start+86400000).toISOString().slice(0,16));await page.getByRole('button',{name:'Periksa harga',exact:true}).click();await expect(page.getByText('Total Rp 50.000',{exact:true})).toBeVisible();
+ await page.goto(base+'/admin/packages');const edit=page.getByRole('heading',{name:'Paket Uji HP',exact:true}).locator('..');await edit.getByLabel('Aktif untuk booking baru',{exact:true}).uncheck();await edit.getByRole('button',{name:'Simpan paket',exact:true}).click();expect((await context.request.get(base+'/checkout?bundle='+bundle.id)).status()).toBe(404);
+ await page.goto(base+'/admin/withdrawals');await page.getByRole('checkbox',{name:/TND-003 ·/}).check();await page.getByLabel('Alasan dan catatan serah-terima',{exact:true}).fill('Penarikan uji mitra');await page.getByRole('button',{name:'Catat penarikan',exact:true}).click();await page.getByRole('link',{name:'Bukti serah-terima',exact:true}).click();await expect(page.getByRole('heading',{name:'Bukti penarikan konsinyasi',exact:true})).toBeVisible();await expect(page.getByText(/TND-003 ·/)).toBeVisible();
+ await page.goto(base+'/admin/kasir');await page.getByLabel('Kode unit dari pemindai / ketik kode',{exact:true}).fill('CRR-003');await page.getByRole('button',{name:'Tambah dari kode',exact:true}).click();await expect(page.getByLabel('Carrier Eiger Equator 60L (Rp30.000/hari)',{exact:true})).toHaveValue('1');
+ await page.getByLabel('Ambil (Asia/Jakarta)',{exact:true}).fill(new Date(start).toISOString().slice(0,16));await page.getByLabel('Kembali',{exact:true}).fill(new Date(start+86400000).toISOString().slice(0,16));await page.getByLabel('Nama penyewa',{exact:true}).fill('Penyewa Barcode Uji');await page.getByLabel('Nomor WhatsApp',{exact:true}).fill('081234560995');await page.getByLabel('Metode pembayaran',{exact:true}).selectOption('transfer');await page.getByLabel('Lebar struk',{exact:true}).selectOption('80');await page.getByRole('button',{name:'Simpan booking & buka struk',exact:true}).click();await expect(page).toHaveURL(/type=thermal&width=80/);await expect(page.getByRole('heading',{name:'Radix Outdoor',exact:true})).toBeVisible();await expect(page.getByText('Penyewa Barcode Uji',{exact:false})).toBeVisible();
+ await page.screenshot({path:'test-results/inventory-receipt-mobile.png',fullPage:true});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);await context.close();
+});
+test('shift, komponen denda dan settlement dapat dijalankan di HP tanpa JavaScript',async({browser})=>{
+ const context=await browser.newContext({javaScriptEnabled:false,viewport:{width:390,height:844}}),page=await context.newPage();
+ const base='http://127.0.0.1:4174';
+ await page.goto(base+'/login');await page.getByLabel('Email',{exact:true}).fill('owner@example.test');await page.getByLabel('Kata sandi',{exact:true}).fill('E2E-only-password-7321');await page.getByRole('button',{name:'Masuk',exact:true}).click();
+ await page.goto(base+'/admin/fine-components');
+ await page.getByLabel('Nama komponen',{exact:true}).fill('Cuci tenda uji');await page.getByLabel('Tarif per komponen (Rp)',{exact:true}).fill('15000');await page.getByRole('button',{name:'Tambah komponen',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Cuci tenda uji',exact:true})).toBeVisible();
+ await page.goto(base+'/admin/cash-shifts');await page.getByLabel('Modal awal (Rp)',{exact:true}).fill('100000');await page.getByRole('button',{name:'Buka shift',exact:true}).click();
+ const bootstrap=await context.request.get(base+'/api/v1/bootstrap'),data=(await bootstrap.json()).data;
+ const outlet=data.records.shift.find((s:any)=>!s.closed_at).outlet_id;
+ const product=data.products.find((p:any)=>p.name==='Tenda Naturehike Cloud Up 2');
+ const csrf=data.csrf,headers={'x-csrf-token':csrf,'Idempotency-Key':'e2e-operation-booking'};
+ async function post(path:string,body:any,key?:string){
+   const response=await context.request.post(base+path,{headers:{...headers,...(key?{'Idempotency-Key':key}:{})},data:body});
+   const json=await response.json();expect(json.ok,JSON.stringify(json)).toBe(true);return json.data;
+ }
+ const start=Date.now()+40*86400000;
+ const b=await post('/api/v1/bookings',{outlet_id:outlet,start_at:start,end_at:start+2*86400000,items:[{product_id:product.id,qty:1}],customer:{name:'Penyewa Operasional Uji',phone:'081234560998'},paid:90000,method:'cash'});
+ await post('/api/v1/bookings/'+b.id+'/pickup',{checked:true,signature:'test-signature',collateral_type:'ktp'});
+ await page.goto(base+'/admin/bookings/'+b.id+'/return');
+ await page.getByLabel(/Cuci tenda uji untuk/).fill('2');
+ await page.getByRole('button',{name:'Simpan pengembalian',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Pengembalian tersimpan',exact:true})).toBeVisible();
+ await post('/api/v1/bookings/'+b.id+'/payments',{amount:30000,method:'transfer'},'e2e-component-payment');
+ await post('/api/v1/bookings/'+b.id+'/complete',{identity_returned:true});
+ await page.goto(base+'/admin/cash-shifts');await page.getByLabel('Nominal pengeluaran (Rp)',{exact:true}).fill('5000');await page.getByLabel('Kategori',{exact:true}).fill('Operasional');await page.getByLabel('Alasan pengeluaran',{exact:true}).fill('Beli kantong');await page.getByRole('button',{name:'Catat pengeluaran tunai',exact:true}).click();
+ await page.getByLabel('Uang tunai fisik (Rp)',{exact:true}).fill('185000');await page.getByRole('button',{name:'Tutup shift',exact:true}).click();
+ await expect(page.getByText(/Ekspektasi Rp185.000/)).toBeVisible();
+ await page.goto(base+'/admin/settlements');
+ const date=new Date(Date.now()+7*3600000).toISOString().slice(0,10);
+ await page.getByLabel('Periode dari',{exact:true}).fill(date);await page.getByLabel('Periode sampai (termasuk tanggal ini)',{exact:true}).fill(date);await page.getByRole('button',{name:'Simpan draft settlement',exact:true}).click();
+ await expect(page.getByRole('heading',{name:/· Draft/})).toBeVisible();
+ await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Tandai sudah dibayar',exact:true}).click();await expect(page.getByRole('heading',{name:/· Dibayar/})).toBeVisible();
+ await page.screenshot({path:'test-results/operations-mobile.png',fullPage:true});
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=window.innerWidth)).toBe(true);
+ await context.close();
+});
 test('storefront publik dan login Owner langsung di Worker',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
  await page.goto('/');await expect(page).toHaveTitle(/Radix Outdoor/);

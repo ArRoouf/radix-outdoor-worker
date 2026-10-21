@@ -11,7 +11,7 @@ export const uid = () => {
   return `${h.slice(0,8)}-${h.slice(8,12)}-${h.slice(12,16)}-${h.slice(16,20)}-${h.slice(20)}`;
 };
 export type AccessScope = { role: 'system'|'owner'|'admin'|'warehouse'|'partner'|'guest'; outletId?: string|null; partnerId?: string|null };
-const allowedTables = new Set(['store_profile','users','sessions','records','products','units','customers','bookings','items','reservations','payments','ledger','status_logs','audit','uploads','operation_keys','rate_limits']);
+const allowedTables = new Set(['store_profile','users','sessions','records','products','units','customers','bookings','items','reservations','payments','ledger','status_logs','audit','uploads','operation_keys','rate_limits','settlement_entries']);
 export class Repo {
   getStoreProfile() {
     const query=drizzle(this.db).select().from(storeProfile).where(eq(storeProfile.id,1)).toSQL();
@@ -43,7 +43,8 @@ export class Repo {
       `products AS (SELECT * FROM main.products${s.role==='partner'?' WHERE id IN(SELECT product_id FROM units)':''})`,
       `records AS (SELECT * FROM main.records WHERE ${s.role==='partner'
         ? `(kind='partner' AND id=${param}) OR (kind='settlement' AND json_extract(data,'$.partner_id')=${param}) OR kind='outlet'`
-        : `kind IN('category','bundle','price_rule','voucher') OR (kind='outlet' AND id=${param}) OR json_extract(data,'$.outlet_id')=${param} OR json_extract(data,'$.booking_id') IN(SELECT id FROM bookings) OR json_extract(data,'$.unit_id') IN(SELECT id FROM units)`})`,
+        : `kind IN('category','bundle','price_rule','voucher','fine_component') OR (kind='outlet' AND id=${param}) OR json_extract(data,'$.outlet_id')=${param} OR json_extract(data,'$.booking_id') IN(SELECT id FROM bookings) OR json_extract(data,'$.unit_id') IN(SELECT id FROM units)`})`,
+      `settlement_entries AS (SELECT * FROM main.settlement_entries WHERE settlement_id IN(SELECT id FROM records WHERE kind='settlement'))`,
       `uploads AS (SELECT * FROM main.uploads WHERE kind='product' OR owner_token IN(SELECT id FROM bookings) OR id IN(SELECT id_doc FROM customers) OR id IN(SELECT json_extract(data,'$.signature') FROM records WHERE kind='inspection') OR id IN(SELECT json_extract(data,'$.photo') FROM records WHERE kind='inspection'))`,
     ];
     // UPDATE targets use the real table; the subquery uses the scoped CTE.

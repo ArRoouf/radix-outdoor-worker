@@ -67,6 +67,39 @@ describe('Login mandiri dan keamanan sesi',()=>{
   });
 });
 describe('Akses satu bisnis dengan banyak outlet dan mitra',()=>{
+  it('membuat beberapa unit sekaligus dengan kode yang berbeda',async()=>{
+    const owner=await login(),r=new Repo(db as any,{role:'owner'});
+    await r.batch([r.record('outlet',{name:'Pusat'},'out-A')]);
+    const response=await request('/api/v1/products',{method:'POST',headers:{cookie:owner.cookie,'x-csrf-token':owner.csrf,'content-type':'application/json'},body:JSON.stringify({name:'Tenda Baru',category:'Tenda',price:40000,capacity:1,outlet_id:'out-A',quantity:3})});
+    expect(response.status).toBe(200);
+    const units=await r.all('SELECT code FROM units');expect(units).toHaveLength(3);expect(new Set(units.map(u=>u.code)).size).toBe(3);
+  });
+  it('form operasional server, CSRF, validasi 422, serta larangan akses staf ke master dan settlement',async()=>{
+    const owner=await login(),r=new Repo(db as any,{role:'owner'});
+    await r.batch([r.record('outlet',{name:'Outlet A'},'out-A')]);
+    const headers={cookie:owner.cookie,'content-type':'application/x-www-form-urlencoded',origin:'https://radix.test'};
+    const form=(path:string,body:Record<string,string>)=>request(path,{method:'POST',headers,body:new URLSearchParams({...body,csrf:owner.csrf})});
+    expect((await request('/admin/cash-shifts')).status).toBe(302);
+    const page=await request('/admin/fine-components',{headers:{cookie:owner.cookie}});
+    expect(page.status).toBe(200);expect(page.headers.get('cache-control')).toBe('no-store');
+    expect((await form('/admin/fine-components',{name:'',category:'cleaning',amount:'-1'})).status).toBe(422);
+    const valid=await form('/admin/fine-components',{name:'Cuci tenda',category:'cleaning',amount:'15000',active:'yes'});
+    expect(valid.status).toBe(303);expect((await r.records('fine_component'))[0].amount).toBe(15000);
+    expect((await form('/admin/cash-shifts/open',{outlet_id:'out-A',opening_cash:'100000'})).status).toBe(303);
+    const s=(await r.records('shift'))[0];
+    expect((await form('/admin/cash-shifts/'+s.id+'/expense',{amount:'5000',category:'Kas',note:'Beli kantong',idempotency_key:'expense'})).status).toBe(303);
+    expect((await form('/admin/cash-shifts/'+s.id+'/close',{closing_cash:'95000',note:'Sesuai'})).status).toBe(303);
+    expect((await r.records('shift'))[0].difference).toBe(0);
+    const fragment=await request('/admin/fine-components',{headers:{cookie:owner.cookie,'HX-Request':'true'}});
+    expect(await fragment.text()).not.toContain('<!doctype');
+    const staffId='ops-admin';
+    await r.batch([r.insert('users',{id:staffId,name:'Kasir A',email:'ops-admin@example.test',role:'admin',outlet_id:'out-A',password_hash:await hashPassword(password),active:1})]);
+    const staff=await login('ops-admin@example.test');
+    for(const path of ['/admin/fine-components','/admin/settlements'])expect((await request(path,{headers:{cookie:staff.cookie}})).status).toBe(403);
+    const mutation=await request('/api/v1/fine-components',{method:'POST',headers:{cookie:staff.cookie,'x-csrf-token':staff.csrf,'content-type':'application/json'},body:JSON.stringify({name:'Test',amount:1,category:'cleaning'})});
+    expect(mutation.status).toBe(403);
+    expect((await request('/admin/cash-shifts/open',{method:'POST',headers:{cookie:staff.cookie,'content-type':'application/x-www-form-urlencoded'},body:'outlet_id=out-A&opening_cash=0'})).status).toBe(403);
+  });
   it('membatasi bootstrap, detail, ekspor, PDF dan pembayaran berdasarkan outlet',async()=>{
     const owner=await login(),r=new Repo(db as any,{role:'owner'});
     await r.batch([r.record('outlet',{name:'A'},'out-A'),r.record('outlet',{name:'B'},'out-B'),r.insert('products',{id:'p',name:'Tenda',category:'Tenda',price:40000,created_at:1}),r.insert('units',{id:'ua',product_id:'p',outlet_id:'out-A',code:'A-1',created_at:1}),r.insert('units',{id:'ub',product_id:'p',outlet_id:'out-B',code:'B-1',created_at:1})]);
@@ -77,6 +110,8 @@ describe('Akses satu bisnis dengan banyak outlet dan mitra',()=>{
     expect(staff.data.store.settings).not.toHaveProperty('qris_payload');
     expect((await request('/api/v1/bookings/'+booking.id,{headers:{cookie:staff.cookie}})).status).toBe(404);
     expect((await request('/admin/bookings/'+booking.id+'/print',{headers:{cookie:staff.cookie}})).status).toBe(404);
+    expect((await request('/admin/bookings/'+booking.id+'/print?type=thermal&width=58',{headers:{cookie:staff.cookie}})).status).toBe(404);
+    for(const path of ['/admin/opnames','/admin/withdrawals','/admin/packages'])expect((await request(path,{headers:{cookie:staff.cookie}})).status).toBe(403);
     const csv=await request('/api/v1/reports/export',{headers:{cookie:staff.cookie}});expect(await csv.text()).not.toContain(booking.code);
     expect((await request('/api/v1/bookings/'+booking.id+'/payments',{method:'POST',headers:{cookie:staff.cookie,'x-csrf-token':staff.csrf,'content-type':'application/json','Idempotency-Key':'bad'},body:'{"amount":1000,"method":"cash"}'})).status).toBe(404);
     const all=await request('/api/v1/bootstrap',{headers:{cookie:owner.cookie}});expect((await all.json() as any).data.bookings).toHaveLength(1);

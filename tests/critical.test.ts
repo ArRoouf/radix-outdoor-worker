@@ -1,5 +1,6 @@
+import { openShift } from '../apps/api/src/services/cash';
 import {SQLiteD1} from '../packages/db/local-adapter';
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, vi } from "vitest";
 import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { duration, downPayment, lateFee, share, crc16, qris, assertTransition, DAY, } from "../packages/shared/pricing";
@@ -54,6 +55,7 @@ async function fixture() {
                     }),
                 ]);
     }
+    await openShift(r,{outlet_id:'out-A',opening_cash:0},'owner');
 }
 const payload = (phone = "081234567890") => ({
     start_at: start,
@@ -95,6 +97,16 @@ describe("Rumus PRD", () => {
 });
 describe("Database & service invariants", () => {
     beforeEach(fixture);
+    it('dua booking untuk unit berbeda pada milidetik sama memiliki kode berbeda',async()=>{
+        const clock=vi.spyOn(Date,'now').mockReturnValue(1700000000000);
+        try {
+            const body={...payload(),items:[{product_id:'bag-A',qty:1}]};
+            const a=await createBooking(r,settings,body,'same-ms-a','owner');
+            const b=await createBooking(r,settings,body,'same-ms-b','owner');
+            expect(a.code).not.toBe(b.code);
+            expect(await r.all('SELECT id FROM bookings')).toHaveLength(2);
+        }finally{clock.mockRestore();}
+    });
     it("contoh harga bagian 18.8", async () => {
         await r.batch([
             r.record("voucher", {
