@@ -4,13 +4,16 @@ import {cashierData,cartForm,paperWidth} from '../services/cashier';
 import {scanCart} from '../services/inventory';
 import {DomainError,fail} from '../services/errors';
 import {quote,createBooking} from '../services/rental';
-import {operationsPage} from '../views/operations';
 import {cashierView} from '../views/cashier';
 import {storeMidnight} from '../../../../packages/shared/dates';
 function time(value:any,timezone:string){const text=String(value);if(!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(text))fail('INVALID_RANGE','Isi tanggal dan jam sewa');const hours=Number(text.slice(11,13)),minutes=Number(text.slice(14,16));if(hours>23||minutes>59)fail('INVALID_RANGE','Jam sewa tidak valid');return storeMidnight(text.slice(0,10),timezone)+(hours*60+minutes)*60000;}
-export function cashierRoutes(app:any){
+export function cashierRoutes(app:any,layout:(c:any,content:string)=>Promise<string>){
  async function authorize(c:any){if(!await requireSession(c,false))return false;if(!['owner','admin'].includes(c.get('member').role))fail('FORBIDDEN','Akses kasir ditolak',403);c.header('Cache-Control','no-store');return true;}
- async function render(c:any,values:any={},price:any=null,error='',status=200){const data={...await cashierData(c.get('repo')),timezone:c.get('store').timezone};return c.html(operationsPage('Kasir penyewaan',cashierView(data,c.get('csrf'),values,price),error,!!c.req.header('HX-Request'),c.get('member').role),status);}
+ async function render(c:any,values:any={},price:any=null,error='',status=200){
+  const data={...await cashierData(c.get('repo')),timezone:c.get('store').timezone,role:c.get('member').role};
+  const content=cashierView(data,c.get('csrf'),values,price,error).toString();
+  return c.html(c.req.header('HX-Request')?content:await layout(c,content),status);
+ }
  app.get('/admin/kasir',async(c:any)=>{if(!await authorize(c))return c.redirect('/login');return render(c);});
  app.post('/admin/kasir/:action',async(c:any)=>{
   if(!await authorize(c))return c.redirect('/login');await csrfCheck(c);const b=await c.req.parseBody(),r=c.get('repo'),action=c.req.param('action');

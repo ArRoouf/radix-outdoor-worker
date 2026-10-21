@@ -1034,7 +1034,7 @@ app.get("/product/:id", c=>storefront(c,"product"));
 app.get("/guide", c=>storefront(c,"guide"));
 app.get("/terms", c=>storefront(c,"terms"));
 app.get("/lookup", c=>storefront(c,"lookup"));
-cashierRoutes(app);
+cashierRoutes(app,async(c,content)=>shell(await bootstrap(c),'bookings',content,'Buat booking'));
 inventoryRoutes(app);
 operationsRoutes(app,upload);
 app.get("/admin/*", async (c) => {

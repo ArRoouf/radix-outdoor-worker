@@ -20,6 +20,25 @@ async function login(email='owner@example.test') {
 }
 beforeEach(()=>{db=new SQLiteD1();env={DB:db,ASSETS:{fetch:()=>new Response('not found',{status:404})},FILES_PRIVATE:{},FILES_PUBLIC:{},INITIAL_OWNER_EMAIL:'owner@example.test',INITIAL_OWNER_PASSWORD:password};});
 describe('Login mandiri dan keamanan sesi',()=>{
+  it('form booking memakai dashboard dan menjelaskan data awal yang belum tersedia',async()=>{
+    const owner=await login(),headers={cookie:owner.cookie};
+    const response=await request('/admin/kasir',{headers});
+    const html=await response.text();
+    expect(response.status).toBe(200);expect(response.headers.get('cache-control')).toBe('no-store');
+    expect(html).toContain('<title>Buat booking · Radix Outdoor</title>');
+    expect(html).toContain('class="sidebar"');expect(html).toContain('nav-link active" href="/admin/bookings"');
+    expect(html).toContain('Belum ada outlet pengambilan');expect(html).toContain('Belum ada produk yang diterbitkan');
+    expect(html).toContain('href="/admin/products"');expect(html).not.toContain('action="/admin/kasir/create"');
+    const r=new Repo(db as any,{role:'owner'});
+    await r.batch([r.record('outlet',{name:'Pusat'},'cashier-outlet'),r.insert('products',{id:'cashier-product',name:'Tenda Kasir',category:'Tenda',price:40000,published:1,created_at:1})]);
+    const ready=await request('/admin/kasir',{headers});const readyHtml=await ready.text();
+    expect(readyHtml).toContain('action="/admin/kasir/create"');expect(readyHtml).toContain('Tenda Kasir');
+    const invalid=await request('/admin/kasir/quote',{method:'POST',headers:{...headers,'content-type':'application/x-www-form-urlencoded',origin:'https://radix.test'},body:new URLSearchParams({csrf:owner.csrf,outlet_id:'cashier-outlet',name:'Nama tersimpan',idempotency_key:'retained-token'})});
+    expect(invalid.status).toBe(422);const invalidHtml=await invalid.text();
+    expect(invalidHtml).toContain('class="sidebar"');expect(invalidHtml).toContain('role="alert"');expect(invalidHtml).toContain('value="Nama tersimpan"');expect(invalidHtml).toContain('value="retained-token"');
+    const fragment=await request('/admin/kasir',{headers:{...headers,'HX-Request':'true'}});const fragmentHtml=await fragment.text();
+    expect(fragmentHtml).toContain('id="cashier-content"');expect(fragmentHtml).not.toContain('<!doctype');expect(fragmentHtml).not.toContain('class="sidebar"');
+  });
   it('hash memakai salt unik dan menolak kata sandi salah',async()=>{
     const a=await hashPassword(password),b=await hashPassword(password);
     expect(a).not.toBe(b);expect(await verifyPassword(password,a)).toBe(true);expect(await verifyPassword('salah',a)).toBe(false);

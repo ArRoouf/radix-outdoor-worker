@@ -1,15 +1,28 @@
 import {uid} from '../repo';
 const money=(n:number)=>'Rp'+Number(n).toLocaleString('id-ID');
-export function cashierView(data:any,csrf:string,values:any={},quote:any=null){
- const field=(name:string,label:string,type='text',value:any='',required=true)=><label class="block my-3">{label}<input class="block w-full" type={type} name={name} value={value} required={required} min={type==='number'?0:undefined}/></label>;
- return <section class="panel p-4"><form method="post" action="/admin/kasir/create"><input name="csrf" type="hidden" value={csrf}/><input name="idempotency_key" type="hidden" value={values.idempotency_key||uid()}/><label>Outlet pengambilan<select name="outlet_id" required>{data.outlets.map((o:any)=><option value={o.id} selected={o.id===values.outlet_id}>{o.name}</option>)}</select></label>
- <div class="grid gap-4 md:grid-cols-2">{field('start_at','Ambil ('+data.timezone+')','datetime-local',values.start_at||'')}{field('end_at','Kembali','datetime-local',values.end_at||'')}</div>
- <fieldset><legend>Keranjang produk</legend>{data.products.map((p:any)=>field('qty_'+p.id,p.name+' ('+money(p.price)+'/hari)','number',values['qty_'+p.id]??0))}</fieldset>
- {field('code','Kode unit dari pemindai / ketik kode','text','',false)}<button class="btn" type="submit" formaction="/admin/kasir/scan" formnovalidate>Tambah dari kode</button><p>Scan menambah jumlah produk ke keranjang. Unit fisik dialokasikan server berdasarkan ketersediaan pada tanggal sewa.</p>
- <label class="block my-3">Paket sewa (opsional)<select class="block w-full" name="bundle_id"><option value="">Gunakan keranjang produk</option>{data.bundles.map((b:any)=><option value={b.id} selected={b.id===values.bundle_id}>{b.name}</option>)}</select></label>{field('bundle_qty','Jumlah paket','number',values.bundle_qty??1)}<p>Jika paket dipilih, komposisinya menggantikan keranjang produk di atas.</p>
+export function cashierView(data:any,csrf:string,values:any={},quote:any=null,error=''){
+ const field=(name:string,label:string,type='text',value:any='',required=true)=><label>{label}<input type={type} name={name} value={value} required={required} min={type==='number'?0:undefined}/></label>;
+ const ready=data.outlets.length>0&&data.products.length>0;
+ return <div id="cashier-content">
+ <div class="page-heading"><div><h1>Buat booking</h1><p>Pilih periode sewa, isi keranjang, lalu catat pembayaran awal.</p></div><div class="actions"><a class="btn" href="/admin/bookings">Kembali ke booking</a></div></div>
+ {error&&<div class="notice my-3" role="alert">{error}</div>}
+ {!ready?<section class="panel panel-padding space-y-4"><h2>Lengkapi data sebelum membuat booking</h2>
+ {!data.outlets.length&&<p>Belum ada outlet pengambilan yang dapat diakses akun ini.</p>}
+ {!data.products.length&&<p>Belum ada produk yang diterbitkan untuk disewa.</p>}
+ {data.role==='owner'?<><p>Buka Produk &amp; inventori untuk menambahkan outlet pada tab Outlet, lalu tambahkan produk beserta unit fisiknya dan terbitkan produk tersebut.</p><a class="btn primary" href="/admin/products">Buka Produk &amp; inventori</a></>:<p>Hubungi Owner untuk menyiapkan outlet, akses staf, dan produk sewa.</p>}
+ </section>:<section class="panel"><form class="form-body" method="post" action="/admin/kasir/create">
+ <input name="csrf" type="hidden" value={csrf}/><input name="idempotency_key" type="hidden" value={values.idempotency_key||uid()}/>
+ <h2>Periode &amp; outlet</h2><label>Outlet pengambilan<select name="outlet_id" required>{data.outlets.map((o:any)=><option value={o.id} selected={o.id===values.outlet_id}>{o.name}</option>)}</select></label>
+ <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">{field('start_at','Ambil ('+data.timezone+')','datetime-local',values.start_at||'')}{field('end_at','Kembali','datetime-local',values.end_at||'')}</div>
+ <h2 class="form-section-title">Keranjang produk</h2><div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">{data.products.map((p:any)=>field('qty_'+p.id,p.name+' ('+money(p.price)+'/hari)','number',values['qty_'+p.id]??0))}</div>
+ {field('code','Kode unit dari pemindai / ketik kode','text','',false)}<button class="btn" type="submit" formaction="/admin/kasir/scan" formnovalidate>Tambah dari kode</button><p class="field-hint">Scan menambah jumlah produk ke keranjang. Ketersediaan unit diperiksa sesuai tanggal sewa.</p>
+ <div class="grid grid-cols-1 gap-x-4 md:grid-cols-2"><label>Paket sewa (opsional)<select name="bundle_id"><option value="">Gunakan keranjang produk</option>{data.bundles.map((b:any)=><option value={b.id} selected={b.id===values.bundle_id}>{b.name}</option>)}</select></label>{field('bundle_qty','Jumlah paket','number',values.bundle_qty??1)}</div><p class="field-hint">Jika paket dipilih, komposisinya menggantikan keranjang produk di atas.</p>
  {field('voucher_code','Kode voucher','text',values.voucher_code||'',false)}<button class="btn" type="submit" formaction="/admin/kasir/quote" formnovalidate>Hitung harga &amp; cek stok</button>
- {quote&&<div class="notice my-3"><p>Durasi {quote.days} hari · Subtotal {money(quote.subtotal)} · Diskon {money(quote.discount)} · Total {money(quote.total)} · DP minimum {money(quote.dp)}</p></div>}
- {field('name','Nama penyewa','text',values.name||'')}{field('phone','Nomor WhatsApp','tel',values.phone||'')}{field('paid','Pembayaran awal (Rp)','number',values.paid??0)}<label class="block my-3">Metode pembayaran<select name="method" aria-label="Metode pembayaran"><option value="cash" selected={!values.method||values.method==='cash'}>Tunai (wajib shift aktif)</option><option value="transfer" selected={values.method==='transfer'}>Transfer</option><option value="qris" selected={values.method==='qris'}>QRIS</option></select></label><label class="block my-3">Catatan<textarea class="block w-full" name="note">{values.note||''}</textarea></label><label>Lebar struk<select name="paper" aria-label="Lebar struk"><option value="58">58 mm</option><option value="80" selected={values.paper==='80'}>80 mm</option></select></label><button class="btn primary my-3">Simpan booking &amp; buka struk</button></form></section>;
+ {quote&&<div class="notice my-3" role="status"><p>Durasi {quote.days} hari · Subtotal {money(quote.subtotal)} · Diskon {money(quote.discount)} · Total {money(quote.total)} · DP minimum {money(quote.dp)}</p></div>}
+ <h2 class="form-section-title">Penyewa &amp; pembayaran</h2><div class="grid grid-cols-1 gap-x-4 md:grid-cols-2">{field('name','Nama penyewa','text',values.name||'')}{field('phone','Nomor WhatsApp','tel',values.phone||'')}{field('paid','Pembayaran awal (Rp)','number',values.paid??0)}<label>Metode pembayaran<select name="method" aria-label="Metode pembayaran"><option value="cash" selected={!values.method||values.method==='cash'}>Tunai (wajib shift aktif)</option><option value="transfer" selected={values.method==='transfer'}>Transfer</option><option value="qris" selected={values.method==='qris'}>QRIS</option></select></label></div>
+ <label>Catatan<textarea name="note">{values.note||''}</textarea></label><label>Lebar struk<select name="paper" aria-label="Lebar struk"><option value="58">58 mm</option><option value="80" selected={values.paper==='80'}>80 mm</option></select></label><div class="actions my-3"><a class="btn" href="/admin/bookings">Batal</a><button class="btn primary" type="submit">Simpan booking &amp; buka struk</button></div>
+ </form></section>}
+ </div>;
 }
 export function thermalReceipt(data:any,store:any,width:'58'|'80'){
  const b=data.booking;
