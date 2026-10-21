@@ -1,0 +1,32 @@
+import { test, expect } from '@playwright/test';
+test('storefront publik dan login Owner langsung di Worker',async({page})=>{
+ const errors:string[]=[];page.on('pageerror',e=>errors.push(e.message));
+ await page.goto('/');await expect(page).toHaveTitle(/Radix Outdoor/);
+ await expect(page.getByText('Tenda Naturehike Cloud Up 2').first()).toBeVisible();
+ await page.goto('/admin/dashboard');await expect(page).toHaveURL(/\/login/);
+ await page.getByLabel('Email',{exact:true}).fill('owner@example.test');
+ await page.getByLabel('Kata sandi',{exact:true}).fill('E2E-only-password-7321');
+ await page.getByRole('button',{name:'Masuk',exact:true}).click();
+ await expect(page).toHaveURL(/\/admin\/dashboard/);await expect(page.locator('h1')).toHaveText('Ringkasan dashboard');
+ await expect(page.getByText('Langganan & billing')).toHaveCount(0);
+ await page.goto('/admin/settings');await expect(page.getByLabel('Nama toko',{exact:true})).toHaveValue('Radix Outdoor');
+ await expect(page.getByLabel('Aktifkan penerimaan booking baru')).toBeChecked();
+ await page.screenshot({path:'test-results/radix-outdoor-mobile.png',fullPage:true});
+ expect(errors).toEqual([]);
+});
+test('penyewa dapat membuat booking melalui formulir tanpa JavaScript',async({browser})=>{
+ const context=await browser.newContext({javaScriptEnabled:false,viewport:{width:390,height:844}}),page=await context.newPage();
+ await page.goto('http://127.0.0.1:4174/catalog');await page.getByRole('link',{name:'Sewa',exact:true}).first().click();
+ const start=Date.now()+15*86400000;
+ await page.getByLabel('Ambil (Asia/Jakarta)',{exact:true}).fill(new Date(start).toISOString().slice(0,16));
+ await page.getByLabel('Kembali',{exact:true}).fill(new Date(start+2*86400000).toISOString().slice(0,16));
+ await page.getByLabel('Nama penyewa',{exact:true}).fill('Penyewa Uji');
+ await page.getByLabel('Nomor WhatsApp',{exact:true}).fill('081234560999');
+ await page.getByLabel('Foto identitas').setInputFiles({name:'identity.png',mimeType:'image/png',buffer:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+kZQAAAABJRU5ErkJggg==','base64')});
+ await page.getByRole('checkbox').check();await page.getByRole('button',{name:'Buat booking',exact:true}).click();
+ await expect(page.getByRole('heading',{name:'Booking berhasil',exact:true})).toBeVisible();
+ const code=await page.locator('h2').textContent();expect(code).toMatch(/^RX-/);
+ await page.goto('http://127.0.0.1:4174/lookup');await page.getByLabel('Kode booking').fill(code!);await page.getByLabel('Nomor WhatsApp').fill('081234560999');
+ await page.getByRole('button',{name:'Cari booking'}).click();await expect(page.getByRole('heading',{name:'Status booking',exact:true})).toBeVisible();
+ await context.close();
+});

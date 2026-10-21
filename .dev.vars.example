@@ -1,0 +1,6 @@
+# Copy to .dev.vars.local and enter your own credentials. Do not commit that file.
+INITIAL_OWNER_EMAIL="owner@example.com"
+INITIAL_OWNER_PASSWORD="REPLACE_WITH_YOUR_OWN_PASSWORD_MIN_12_CHARACTERS"
+# Optional Browser Rendering REST API, when using PDF downloads:
+# CF_ACCOUNT_ID="YOUR_ACCOUNT_ID"
+# BROWSER_RENDERING_API_TOKEN="YOUR_BROWSER_RENDERING_WRITE_TOKEN"

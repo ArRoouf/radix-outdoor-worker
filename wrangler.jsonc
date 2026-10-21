@@ -1,0 +1,23 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "radix-outdoor",
+  "main": "apps/api/src/index.ts",
+  "compatibility_date": "2026-10-20",
+  "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": true,
+  "assets": { "directory": "dist/client", "binding": "ASSETS", "run_worker_first": true },
+  "d1_databases": [{ "binding": "DB", "database_name": "radix-outdoor-db", "migrations_dir": "packages/db/migrations" }],
+  "r2_buckets": [{ "binding": "FILES_PUBLIC", "bucket_name": "radix-outdoor-public" }, { "binding": "FILES_PRIVATE", "bucket_name": "radix-outdoor-private" }],
+  "queues": { "producers": [{ "binding": "JOBS", "queue": "radix-outdoor-jobs" }], "consumers": [{ "queue": "radix-outdoor-jobs", "max_batch_size": 1, "max_retries": 3 }] },
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "observability": { "enabled": true },
+  "env": {
+    "local": {
+      "name": "radix-outdoor-local",
+      "d1_databases": [{ "binding": "DB", "database_name": "radix-outdoor-local", "database_id": "local", "migrations_dir": "packages/db/migrations" }],
+      "r2_buckets": [{ "binding": "FILES_PUBLIC", "bucket_name": "radix-outdoor-public-local" }, { "binding": "FILES_PRIVATE", "bucket_name": "radix-outdoor-private-local" }],
+      "queues": { "producers": [{ "binding": "JOBS", "queue": "radix-outdoor-jobs-local" }], "consumers": [{ "queue": "radix-outdoor-jobs-local", "max_batch_size": 1 }] },
+      "triggers": { "crons": [] }
+    }
+  }
+}

@@ -1,0 +1,23 @@
+import { readFile, writeFile, mkdir, readdir, rm } from 'node:fs/promises';
+import { execFileSync, spawn } from 'node:child_process';
+import { resolve } from 'node:path';
+import { build } from 'esbuild';
+const state=resolve('.wrangler/e2e-state'),dir=resolve('.wrangler/e2e');
+await rm(state,{recursive:true,force:true});await mkdir(dir,{recursive:true});
+const config=JSON.parse(await readFile('wrangler.jsonc','utf8'));
+Object.assign(config,config.env.local);delete config.env;delete config.$schema;
+config.main=resolve(config.main);config.assets.directory=resolve(config.assets.directory);
+config.d1_databases[0].migrations_dir=resolve(config.d1_databases[0].migrations_dir);
+// Fake credentials exist only in this ignored, isolated test configuration.
+config.vars={INITIAL_OWNER_EMAIL:'owner@example.test',INITIAL_OWNER_PASSWORD:'E2E-only-password-7321'};
+const file=dir+'/wrangler.json';await writeFile(file,JSON.stringify(config));
+const wrangler=resolve('node_modules/wrangler/bin/wrangler.js');
+execFileSync(process.execPath,[wrangler,'d1','migrations','apply','DB','--local','--config',file,'--persist-to',state],{stdio:'pipe',env:{...process.env,CI:'true',WRANGLER_SEND_METRICS:'false'}});
+const path=state+'/v3/d1/miniflare-D1DatabaseObject';
+const dbs=(await readdir(path)).filter(f=>f.endsWith('.sqlite')&&f!=='metadata.sqlite');
+if(dbs.length!==1)throw new Error('E2E database not found');
+await build({stdin:{contents:`import {SQLiteD1} from './packages/db/local-adapter';import {seedDemo} from './packages/db/seed';const db=new SQLiteD1(${JSON.stringify(path+'/'+dbs[0])},false);await seedDemo(db);db.db.exec("UPDATE store_profile SET settings_json=json_set(settings_json,'$.accepting_bookings',json('true')) WHERE id=1");`,resolveDir:process.cwd()},outfile:dir+'/seed.mjs',bundle:true,platform:'node',format:'esm',target:'node22'});
+await import(dir+'/seed.mjs');
+const child=spawn(process.execPath,[wrangler,'dev','--config',file,'--persist-to',state,'--port','4174'],{stdio:'inherit',env:{...process.env,WRANGLER_SEND_METRICS:'false'}});
+process.on('SIGTERM',()=>child.kill('SIGTERM'));process.on('SIGINT',()=>child.kill('SIGINT'));
+child.on('exit',code=>process.exit(code||0));

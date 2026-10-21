@@ -1,0 +1,1 @@
+ALTER TABLE products ADD COLUMN images TEXT NOT NULL DEFAULT '[]';

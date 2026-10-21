@@ -1,0 +1,1 @@
+CREATE TRIGGER voucher_quota BEFORE UPDATE OF data ON records WHEN NEW.kind='voucher' AND COALESCE(json_extract(NEW.data,'$.quota'),0)>0 AND COALESCE(json_extract(NEW.data,'$.used'),0)>json_extract(NEW.data,'$.quota') AND COALESCE(json_extract(NEW.data,'$.used'),0)>COALESCE(json_extract(OLD.data,'$.used'),0) BEGIN SELECT RAISE(ABORT,'VOUCHER_QUOTA'); END;

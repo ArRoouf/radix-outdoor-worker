@@ -1,0 +1,12 @@
+import { build } from 'esbuild';
+import { mkdir, cp, rm } from 'node:fs/promises';
+import { execFileSync } from 'node:child_process';
+await rm('dist',{recursive:true,force:true});
+await mkdir('dist/client',{recursive:true});
+await mkdir('dist/server',{recursive:true});
+await cp('apps/web/public','dist/client',{recursive:true});
+await build({entryPoints:['apps/web/src/client.ts'],outfile:'dist/client/app.js',bundle:true,format:'iife',platform:'browser',target:'es2022',minify:true});
+await cp('node_modules/htmx.org/dist/htmx.min.js','dist/client/htmx.js');
+execFileSync('node',['node_modules/@tailwindcss/cli/dist/index.mjs','-i','apps/web/src/tailwind.css','-o','dist/client/utilities.css','--minify'],{stdio:'inherit'});
+await build({entryPoints:['apps/api/src/index.ts'],outfile:'dist/server/index.js',bundle:true,format:'esm',platform:'neutral',mainFields:['browser','module','main'],conditions:['browser'],target:'es2022',external:['cloudflare:workers'],minify:true});
+console.log('Radix Outdoor: Worker dan aset selesai dibangun.');
